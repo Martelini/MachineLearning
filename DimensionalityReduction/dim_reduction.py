@@ -22,7 +22,13 @@ from sklearn.ensemble import RandomForestClassifier
 import pyautogui
 import time
 
-folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/'
+# folder for windows
+folder = "C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction"
+os.chdir(folder)
+
+# folder for linux
+#folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/'
+
 os.chdir(folder)
 import imfun
 
@@ -49,7 +55,13 @@ def high_pass_filter(img):
 
 #%% Load the images
 
-folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
+
+# folder for windows
+folder = 'C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction\\21.05.20-MicroscopioNikonSlide3B'
+
+# folder for linux
+# folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
+
 os.chdir(folder)
 names = os.listdir(os.curdir)
 
