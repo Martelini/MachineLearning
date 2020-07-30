@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from scipy import ndimage
-
+import math
 
 from sklearn.decomposition import PCA
 from sklearn.decomposition import FastICA
@@ -23,11 +23,10 @@ import pyautogui
 import time
 
 # folder for windows
-folder = "C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction"
-os.chdir(folder)
+#folder = "C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction"
 
 # folder for linux
-#folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/'
+folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/'
 
 os.chdir(folder)
 import imfun
@@ -46,21 +45,50 @@ def reorganize(img, codebook, w, h, z):
     return np.uint8(image)
 
 def high_pass_filter(img):
-    kernel = np.array([[-1, -1, -1, -1, -1],
-                   [-1,  1,  2,  1, -1],
-                   [-1,  2,  4,  2, -1],
-                   [-1,  1,  2,  1, -1],
-                   [-1, -1, -1, -1, -1]])
+    kernel = np.array([[-1, -1, -1],
+                   [-1, 8, -1],
+                   [-1, -1, -1]])
     return ndimage.convolve(img, kernel)
 
+#%%
+
+def filter_freq(img, tipo, freq):
+    w, h = img.shape[0:2]
+
+    a = np.fft.fft2(img)#, [2*w, 2*h])
+    a = np.fft.fftshift(a)
+
+    filtro = np.zeros([w, h])
+    n=1
+
+    cx = int(np.floor(w/2)+1)
+    cy = int(np.floor(h/2)+1)
+    for x in range(w):
+        for y in range(h):
+            D = math.sqrt((x-cx)**2+(y-cy)**2)
+            if tipo == 'high':
+                filtro[x,y] = 1/(1+(freq/(D+0.000001))**(2*n))
+            elif tipo == 'low':
+                filtro[x,y] = 1/(1+((D+0.000001)**(2*n)/freq))
+            else:
+                print('Não há esse filtro')
+
+    b = np.multiply(a,filtro)
+
+    c = np.fft.ifftshift(b)
+    c = np.fft.ifft2(c)#, [w,h])
+    c= np.uint8(np.abs(c))
+    
+    return c
+    
 #%% Load the images
 
 
 # folder for windows
-folder = 'C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction\\21.05.20-MicroscopioNikonSlide3B'
+#folder = 'C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction\\21.05.20-MicroscopioNikonSlide3B'
 
 # folder for linux
-# folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
+folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
 
 os.chdir(folder)
 names = os.listdir(os.curdir)
@@ -84,7 +112,10 @@ rgb = np.dstack((images[red],images[green],images[blue]))
 w, h = bgr.shape[0:2]
 d = len(images)
 
+
 #%% Hyperspectral image
+
+print("Carregando a imagem multiespectral...")
 
 hyper_image = np.zeros([w, h, d])
 
@@ -95,17 +126,13 @@ for x in range(w):
 
 #%% High-pass filter
 
-filtered_hyper_image = np.zeros(hyper_image.shape)
+print("Aplicando o filtro passa-alta...")
+
+filtered_hyper_image = np.zeros([w,h,d])
 
 for i in range(d):
-    filtered_hyper_image[:,:,i] = high_pass_filter(hyper_image[:,:,i]/255)
-    filtered_hyper_image[filtered_hyper_image<0] = 0
-    filtered_hyper_image[:,:,i] = filtered_hyper_image[:,:,i]*255/filtered_hyper_image[:,:,i].max()
-    filtered_hyper_image[filtered_hyper_image>255] = 255
+    filtered_hyper_image[:,:,i] = filter_freq(hyper_image[:,:,i], 'low', 35)
 
-bgr_filtered = np.uint8(np.dstack((filtered_hyper_image[:,:,blue],filtered_hyper_image[:,:,green],filtered_hyper_image[:,:,red])))
-
-#cv2.imshow('Filtered image', bgr_filtered)
 #%% Crop image and select region
 
 label = []
@@ -132,7 +159,7 @@ while end == 'Sim':
     poly = poly[:,:,0]
     index = np.asarray(np.where(poly==255)).T + [min(points[0][1], points[1][1]),min(points[0][0], points[1][0])]
     for x, y in index:
-        data.append(np.hstack((hyper_image[x,y,:], i)))
+        data.append(np.hstack((filtered_hyper_image[x,y,:], i)))
     keep = pyautogui.confirm(text='Deseja selecionar mais pedaços dessa região?', title='Continuar', buttons=['Sim', 'Não'])
     if keep == 'Não':
         end = pyautogui.confirm(text='Deseja selecionar outra região?', title='Adicionar outra região', buttons=['Sim', 'Não'])
@@ -145,7 +172,7 @@ pyautogui.alert('Aguarde o treinamento e a predição da imagem', "Aguarde")
 data = np.asarray(data)
 #%% Organizing data
 
-print('Fitting PCA and ICA')
+print('Fitting PCA and ICA...')
 
 # Normalization
 
@@ -171,7 +198,7 @@ ica_data = ica.fit_transform(data_x_norm)
 
 #%% Random Forest fitting
 
-print('Random Forest fitting')
+print('Random Forest fitting...')
 
 data_y = data[:,-1]
 n_trees = 50
@@ -184,7 +211,7 @@ rf_ica.fit(ica_data, data_y)
 
 # Preparing the image to be predicted
 
-print('Preparing the image to be predicted')
+print('Preparing the image to be predicted...')
 
 hyper_image_data = hyper_image.reshape([w*h, d])
 
@@ -196,7 +223,7 @@ ica_image = ica.fit_transform(hyper_image_norm)
 
 # Predicting image
 
-print('Predicting image')
+print('Predicting image...')
 
 result_pca = rf_pca.predict(pca_image)
 result_ica = rf_ica.predict(ica_image)
