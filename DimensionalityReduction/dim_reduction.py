@@ -11,14 +11,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-
+from scipy import ndimage
 
 
 from sklearn.decomposition import PCA
 from sklearn.decomposition import FastICA
 #from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.utils import shuffle
 
 import pyautogui
 import time
@@ -39,6 +38,14 @@ def reorganize(img, codebook, w, h, z):
             image[x,y] = codebook[int(img[i]),:]
             i += 1
     return np.uint8(image)
+
+def high_pass_filter(img):
+    kernel = np.array([[-1, -1, -1, -1, -1],
+                   [-1,  1,  2,  1, -1],
+                   [-1,  2,  4,  2, -1],
+                   [-1,  1,  2,  1, -1],
+                   [-1, -1, -1, -1, -1]])
+    return ndimage.convolve(img, kernel)
 
 #%% Load the images
 
@@ -74,7 +81,19 @@ for x in range(w):
         for z in range(d):
             hyper_image[x,y,z] = images[z][x,y]
 
+#%% High-pass filter
 
+filtered_hyper_image = np.zeros(hyper_image.shape)
+
+for i in range(d):
+    filtered_hyper_image[:,:,i] = high_pass_filter(hyper_image[:,:,i]/255)
+    filtered_hyper_image[filtered_hyper_image<0] = 0
+    filtered_hyper_image[:,:,i] = filtered_hyper_image[:,:,i]*255/filtered_hyper_image[:,:,i].max()
+    filtered_hyper_image[filtered_hyper_image>255] = 255
+
+bgr_filtered = np.uint8(np.dstack((filtered_hyper_image[:,:,blue],filtered_hyper_image[:,:,green],filtered_hyper_image[:,:,red])))
+
+#cv2.imshow('Filtered image', bgr_filtered)
 #%% Crop image and select region
 
 label = []
