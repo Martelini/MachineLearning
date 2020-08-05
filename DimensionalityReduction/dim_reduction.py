@@ -11,7 +11,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from scipy import ndimage
 import math
 
 from sklearn.decomposition import PCA
@@ -44,13 +43,7 @@ def reorganize(img, codebook, w, h, z):
             i += 1
     return np.uint8(image)
 
-def high_pass_filter(img):
-    kernel = np.array([[-1, -1, -1],
-                   [-1, 8, -1],
-                   [-1, -1, -1]])
-    return ndimage.convolve(img, kernel)
-
-#%%
+#%% Definition of the filter
 
 def filter_freq(img, tipo, freq):
     w, h = img.shape[0:2]
@@ -115,7 +108,7 @@ d = len(images)
 
 #%% Hyperspectral image
 
-print("Carregando a imagem multiespectral...")
+print("Loading hyperspectral image...")
 
 hyper_image = np.zeros([w, h, d])
 
@@ -124,19 +117,10 @@ for x in range(w):
         for z in range(d):
             hyper_image[x,y,z] = images[z][x,y]
 
-#%% High-pass filter
-
-print("Aplicando o filtro passa-alta...")
-
-filtered_hyper_image = np.zeros([w,h,d])
-
-for i in range(d):
-    filtered_hyper_image[:,:,i] = filter_freq(hyper_image[:,:,i], 'low', 35)
-
 #%% Crop image and select region
 
 label = []
-data = []
+index = []
 
 pyautogui.alert('Nesse momento as regiões serão selecionadas', "Regiões")
 label.append(pyautogui.prompt('Escreva o nome da primeira região:'))
@@ -148,48 +132,71 @@ while end == 'Sim':
     zoom = pyautogui.confirm(text='Deseja dar zoom para selecionar a região?', title='Zoom', buttons=['Sim', 'Não'])
     if zoom == 'Sim':
         pyautogui.alert('Escolha um local da imagem para dar zoom', "Zoom")
-        time.sleep(0.1)
+        time.sleep(0.3)
         ret, points = imfun.crop_image(bgr, False, None)
     else:
         ret = bgr
         points = [(0,0),(0,0)]
     pyautogui.alert('Selecione um polígono na imagem', "Seleção")
-    time.sleep(0.1)
+    time.sleep(0.3)
     poly, points1 = imfun.polyroi(ret)#, window_name=('Selecione a região'+label[0]))
     poly = poly[:,:,0]
-    index = np.asarray(np.where(poly==255)).T + [min(points[0][1], points[1][1]),min(points[0][0], points[1][0])]
-    for x, y in index:
-        data.append(np.hstack((filtered_hyper_image[x,y,:], i)))
+    index.append(np.asarray(np.where(poly==255)).T + [min(points[0][1], points[1][1]),min(points[0][0], points[1][0])])
     keep = pyautogui.confirm(text='Deseja selecionar mais pedaços dessa região?', title='Continuar', buttons=['Sim', 'Não'])
     if keep == 'Não':
         end = pyautogui.confirm(text='Deseja selecionar outra região?', title='Adicionar outra região', buttons=['Sim', 'Não'])
         if end == 'Sim':
             label.append(pyautogui.prompt('Escreva o nome da próxima região:'))
             i += 1
+            
+#%% High-pass filter
 
-pyautogui.alert('Aguarde o treinamento e a predição da imagem', "Aguarde")
+aplicar_filtro = pyautogui.confirm(text='Deseja aplicar algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
+
+if aplicar_filtro == 'Sim':
+    tipo_filtro = pyautogui.confirm(text='Qual filtro?', title='Filtro', buttons=['Passa-alta', 'Passa-baixa'])
+    if tipo_filtro == 'Passa-alta':
+        tipo = 'high'
+    elif tipo_filtro == 'Passa-baixa':
+        tipo = 'low'
+    frequency = int(pyautogui.prompt('Digite a frequência de corte em pixels:'))
+    filtered_hyper_image = np.zeros([w,h,d])
+    print("Applying the filter...")
+    for i in range(d):
+        filtered_hyper_image[:,:,i] = filter_freq(hyper_image[:,:,i], tipo, frequency)
+else:
+    filtered_hyper_image = hyper_image
+            
+#%%
+
+data = []
+
+for i in range(len(label)):
+    for x, y in index[i]:
+        data.append(np.hstack((filtered_hyper_image[x,y,:], i)))
 
 data = np.asarray(data)
 #%% Organizing data
 
-print('Fitting PCA and ICA...')
-
-# Normalization
-
 data_x = data[:,:d]
-data_x_norm = data_x/data_x.max()
 
-# Applying feature extraction algorithms
+apply_pca = pyautogui.confirm(text='Deseja aplicar PCA?', title='PCA', buttons=['Sim', 'Não'])
 
-#explained_variance = 0.95
-n_components = 2
+if apply_pca == 'Sim':
+    n_comp = int(pyautogui.prompt("Digite o número de componentes ou a variância explicada:"))
+    print('Fitting PCA...')
+    data_x_norm = data_x/data_x.max()
+    pca = PCA(n_components=n_comp)
+    pca_data = pca.fit_transform(data_x_norm)
 
-pca = PCA(n_components=n_components) # It's necessary just one component for this variance
-pca_data = pca.fit_transform(data_x_norm)
+apply_ica = pyautogui.confirm(text='Deseja aplicar ICA?', title='ICA', buttons=['Sim', 'Não'])
 
-
-ica = FastICA(n_components=n_components)
-ica_data = ica.fit_transform(data_x_norm)
+if apply_ica == 'Sim':
+    n_comp1 = int(pyautogui.prompt("Digite o número de componentes:"))
+    print('Fitting ICA...')
+    data_x_norm = data_x/data_x.max()
+    ica = FastICA(n_components=n_comp1)
+    ica_data = ica.fit_transform(data_x_norm)
 
 # Too slow
 
@@ -198,59 +205,104 @@ ica_data = ica.fit_transform(data_x_norm)
 
 #%% Random Forest fitting
 
-print('Random Forest fitting...')
-
 data_y = data[:,-1]
-n_trees = 50
 
-rf_pca = RandomForestClassifier(n_trees)
-rf_ica = RandomForestClassifier(n_trees)
+n_trees = int(pyautogui.prompt("Digite o número de árvores:"))
 
-rf_pca.fit(pca_data, data_y)
-rf_ica.fit(ica_data, data_y)
+apply_rf = pyautogui.confirm(text='Deseja aplicar Random Forest nos dados brutos?', title='Random Forest', buttons=['Sim', 'Não'])
 
-# Preparing the image to be predicted
+if apply_rf == "Sim":
+    print('Fitting Random Forest...')
+    rf = RandomForestClassifier(n_trees)
+    rf.fit(data_x, data_y)
 
-print('Preparing the image to be predicted...')
+if apply_pca == "Sim":
+    print('Fitting Random Forest with PCA...')
+    rf_pca = RandomForestClassifier(n_trees)
+    rf_pca.fit(ica_data, data_y)
+    
+if apply_ica == "Sim":
+    print('Fitting Random Forest with ICA...')
+    rf_ica = RandomForestClassifier(n_trees)
+    rf_ica.fit(pca_data, data_y)
+    
 
-hyper_image_data = hyper_image.reshape([w*h, d])
+#%% Predicting the image
 
-hyper_image_norm = hyper_image_data/hyper_image_data.max()
+hyper_image_data = filtered_hyper_image.reshape([w*h, d])
 
-pca_image = pca.fit_transform(hyper_image_norm)
+if apply_rf == "Sim":
+    print('Predicting image with Random Forest...')
+    result = rf.predict(hyper_image_data)
 
-ica_image = ica.fit_transform(hyper_image_norm)
+if apply_pca == "Sim":
+    print('Predicting image with Random Forest and PCA...')
+    hyper_image_norm = hyper_image_data/hyper_image_data.max()
+    pca_image = pca.transform(hyper_image_norm)
+    result_pca = rf_pca.predict(pca_image)
+    
+if apply_ica == "Sim":
+    print('Predicting image with Random Forest and ICA...')
+    hyper_image_norm = hyper_image_data/hyper_image_data.max()
+    ica_image = ica.transform(hyper_image_norm)
+    result_ica = rf_ica.predict(ica_image)
 
-# Predicting image
 
-print('Predicting image...')
-
-result_pca = rf_pca.predict(pca_image)
-result_ica = rf_ica.predict(ica_image)
-
-# Reshaping image
+#%% Reshaping image
 
 codebook = colors[:len(label),:]
 
-final_pca = reorganize(result_pca, codebook, w, h, 3)
-final_ica = reorganize(result_ica, codebook, w, h, 3)
+if apply_rf == "Sim":
+    final = reorganize(result, codebook, w, h, 3)
 
-# Show the resulting images
+if apply_pca == "Sim":
+    final_pca = reorganize(result_pca, codebook, w, h, 3)
+    
+if apply_ica == "Sim":
+    final_ica = reorganize(result_ica, codebook, w, h, 3)
 
-plt.figure("Figura original e Random Forest")
-plt.subplot(131)
+#%% Show the resulting images
+
+i = 1
+
+total = int(apply_rf == "Sim") + int(apply_pca == "Sim") + int(apply_ica == "Sim")
+if total == 1:
+    sub = [1,2]
+elif total == 2:
+    sub = [1,3]
+elif total == 3:
+    sub = [2,2]
+
+
+plt.figure("Resultado final")
+
+plt.subplot(sub[0],sub[1],i)
+i += 1
 plt.imshow(rgb)
 plt.title("Imagem original")
-
-plt.subplot(132)
-plt.imshow(final_pca)
-plt.title("Random Forest with PCA")
-
-plt.subplot(133)
-plt.imshow(final_ica)
-plt.title("Random Forest with ICA")
 plt.show
 
+if apply_rf == "Sim":
+    plt.subplot(sub[0],sub[1],i)
+    i += 1
+    plt.imshow(final)
+    plt.title("Random Forest")
+    plt.show
+
+if apply_pca == "Sim":
+    plt.subplot(sub[0],sub[1],i)
+    i += 1
+    plt.imshow(final_pca)
+    plt.title("Random Forest with PCA")
+    plt.show
+    
+if apply_ica == "Sim":
+    plt.subplot(sub[0],sub[1],i)
+    i += 1
+    plt.imshow(final_ica)
+    plt.title("Random Forest with ICA")
+    plt.show
+    
 #%% Steps
 
 
