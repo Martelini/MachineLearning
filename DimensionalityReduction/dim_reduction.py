@@ -24,10 +24,10 @@ import pyautogui
 import time
 
 # folder for windows
-#folder = "C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction"
+folder = "C:\\Users\Admin\Documents\Mateus"
 
 # folder for linux
-folder = '/home/mateus/TCC/'
+#folder = '/home/mateus/TCC/'
 
 os.chdir(folder)
 import imfun
@@ -101,8 +101,8 @@ def create_RGB_image(wavelength, hyper_image):
     green = wavelength.index(570)
     red = wavelength.index(630)
 
-    bgr = np.dstack((hyper_image[:,:,blue],hyper_image[:,:,green],hyper_image[:,:,red]))
-    rgb = np.dstack((hyper_image[:,:,red],hyper_image[:,:,green],hyper_image[:,:,blue]))
+    bgr = np.uint8(np.dstack((hyper_image[:,:,blue],hyper_image[:,:,green],hyper_image[:,:,red])))
+    rgb = np.uint8(np.dstack((hyper_image[:,:,red],hyper_image[:,:,green],hyper_image[:,:,blue])))
     
     rgb_index = (red, green, blue)
     
@@ -110,10 +110,10 @@ def create_RGB_image(wavelength, hyper_image):
 #%% Load the hyperspectral image
 
 # folder for windows
-#folder = 'C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction\\21.05.20-MicroscopioNikonSlide3B'
+folder = 'C:\\Users\Admin\Documents\Mateus\MachineLearning-master\DimensionalityReduction\MicroscopioNikonSlide3B'
 
 # folder for linux
-folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
+#folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
 
 wavelength = [410, 430, 450, 470, 490, 510, 530, 540, 550, 570, 590, 610, 630, 650, 670, 690, 710]
 
@@ -248,7 +248,8 @@ if apply_pca == 'Sim':
     data_x_norm = normalize(data[train_index][:,:d])
     pca = PCA(n_components=n_comp)
     pca_data = pca.fit_transform(data_x_norm)
-
+    del data_x_norm
+    
 apply_ica = pyautogui.confirm(text='Deseja aplicar ICA?', title='ICA', buttons=['Sim', 'Não'])
 
 if apply_ica == 'Sim':
@@ -257,8 +258,8 @@ if apply_ica == 'Sim':
     data_x_norm = normalize(data[train_index][:,:d])
     ica = FastICA(n_components=n_comp1)
     ica_data = ica.fit_transform(data_x_norm)
+    del data_x_norm
 
-del data_x_norm
 
 # Too slow
 
@@ -302,15 +303,16 @@ if apply_pca == "Sim":
     hyper_image_norm = normalize(hyper_image_data)
     pca_image = pca.transform(hyper_image_norm)
     result_pca = rf_pca.predict(pca_image)
-    
+    del hyper_image_data
+    del hyper_image_norm
+      
 if apply_ica == "Sim":
     print('Predicting image with Random Forest and ICA...')
     hyper_image_norm = normalize(hyper_image_data)
     ica_image = ica.transform(hyper_image_norm)
     result_ica = rf_ica.predict(ica_image)
-
-del hyper_image_data
-del hyper_image_norm
+    del hyper_image_data
+    del hyper_image_norm
 
 #%% Reshaping image
 
