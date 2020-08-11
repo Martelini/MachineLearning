@@ -26,7 +26,7 @@ import time
 #folder = "C:\\Users\mateu\Desktop\IC\MachineLearning-master\DimensionalityReduction"
 
 # folder for linux
-folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/'
+folder = '/home/mateus/TCC/'
 
 os.chdir(folder)
 import imfun
