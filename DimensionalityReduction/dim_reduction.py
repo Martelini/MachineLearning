@@ -18,6 +18,7 @@ from sklearn.decomposition import FastICA
 #from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import normalize
+from sklearn.model_selection import StratifiedShuffleSplit
 
 import pyautogui
 import time
@@ -95,13 +96,13 @@ def load_hyper_image(folder):
                 hyper_image[x,y,z] = images[z][x,y]
     return hyper_image
 
-def create_RGB_image(wavelength, images):
+def create_RGB_image(wavelength, hyper_image):
     blue = wavelength.index(470) 
     green = wavelength.index(570)
     red = wavelength.index(630)
 
-    bgr = np.dstack((images[blue],images[green],images[red]))
-    rgb = np.dstack((images[red],images[green],images[blue]))
+    bgr = np.dstack((hyper_image[:,:,blue],hyper_image[:,:,green],hyper_image[:,:,red]))
+    rgb = np.dstack((hyper_image[:,:,red],hyper_image[:,:,green],hyper_image[:,:,blue]))
     
     rgb_index = (red, green, blue)
     
@@ -164,13 +165,13 @@ del ret
 
 #%% High-pass filter
 
+def apply_filter(hyper_image, col):
 
-final_image = hyper_image
+    f_image = hyper_image
 
-aplicar_filtro = pyautogui.confirm(text='Deseja aplicar algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
+    aplicar_filtro = pyautogui.confirm(text='Deseja aplicar algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
 
-while aplicar_filtro == "Sim":
-    if aplicar_filtro == 'Sim':
+    while aplicar_filtro == "Sim":
         tipo = pyautogui.prompt("Tipo do filtro: (low, high, median)")
         print("Applying the filter...")
         comp = pyautogui.confirm(text='Quantas componentes?', title='Filtro', buttons=['RGB', 'Todas'])
@@ -179,7 +180,7 @@ while aplicar_filtro == "Sim":
             if comp == "RGB":
                 filtered_hyper_image = np.zeros([w,h,3])
                 for i in range(3):
-                    filtered_hyper_image[:,:,i] = filter_freq(hyper_image[:,:,col[i]], tipo, frequency)
+                       filtered_hyper_image[:,:,i] = filter_freq(hyper_image[:,:,col[i]], tipo, frequency)
             elif comp == "Todas":
                 filtered_hyper_image = np.zeros([w,h,d])
                 for i in range(d):
@@ -194,19 +195,24 @@ while aplicar_filtro == "Sim":
                 filtered_hyper_image = np.zeros([w,h,d])
                 for i in range(d):
                     filtered_hyper_image[:,:,i] = cv2.medianBlur(np.uint8(hyper_image[:,:,i]), size)
-    final_image = np.dstack((final_image,filtered_hyper_image))
-    aplicar_filtro = pyautogui.confirm(text='Deseja aplicar mais algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
+        f_image = np.dstack((f_image,filtered_hyper_image))
+        aplicar_filtro = pyautogui.confirm(text='Deseja aplicar mais algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
+    return f_image
 
-filtered_rgb = np.uint8(np.dstack((filtered_hyper_image[:,:,0],filtered_hyper_image[:,:,1],filtered_hyper_image[:,:,2])))
+final_image = apply_filter(hyper_image, col)
 
-plt.figure("Filtered Image")
-plt.subplot(121)
-plt.imshow(rgb)
-plt.title("Original Image")
+# #%% Show filtered image
 
-plt.subplot(122)
-plt.imshow(filtered_rgb)
-plt.title("Filtered Image")
+# filtered_rgb = np.uint8(np.dstack((filtered_hyper_image[:,:,0],filtered_hyper_image[:,:,1],filtered_hyper_image[:,:,2])))
+
+# plt.figure("Filtered Image")
+# plt.subplot(121)
+# plt.imshow(rgb)
+# plt.title("Original Image")
+
+# plt.subplot(122)
+# plt.imshow(filtered_rgb)
+# plt.title("Filtered Image")
 
 #%%
 #del hyper_image
@@ -221,11 +227,17 @@ for i in range(len(index)):
         data.append(np.hstack((final_image[int(x),int(y),:], l)))
 
 data = np.asarray(data)
-data_x = data[:,:d]
-data_y = data[:,-1]
 
-#%%
-del data
+#%% Split training and test sets
+
+sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
+
+sss.get_n_splits(data[:,:d])
+
+for i, j in sss.split(data[:,:d], data[:,-1]):
+    train_index = i
+    test_index = j
+
 #%% Organizing data
 
 apply_pca = pyautogui.confirm(text='Deseja aplicar PCA?', title='PCA', buttons=['Sim', 'Não'])
@@ -233,7 +245,7 @@ apply_pca = pyautogui.confirm(text='Deseja aplicar PCA?', title='PCA', buttons=[
 if apply_pca == 'Sim':
     n_comp = int(pyautogui.prompt("Digite o número de componentes ou a variância explicada:"))
     print('Fitting PCA...')
-    data_x_norm = normalize(data_x)
+    data_x_norm = normalize(data[train_index][:,:d])
     pca = PCA(n_components=n_comp)
     pca_data = pca.fit_transform(data_x_norm)
 
@@ -242,7 +254,7 @@ apply_ica = pyautogui.confirm(text='Deseja aplicar ICA?', title='ICA', buttons=[
 if apply_ica == 'Sim':
     n_comp1 = int(pyautogui.prompt("Digite o número de componentes:"))
     print('Fitting ICA...')
-    data_x_norm = normalize(data_x)
+    data_x_norm = normalize(data[train_index][:,:d])
     ica = FastICA(n_components=n_comp1)
     ica_data = ica.fit_transform(data_x_norm)
 
@@ -253,7 +265,7 @@ del data_x_norm
 #lda = LatentDirichletAllocation(n_components=n_components)
 #lda.fit(data_x_norm)
 
-#%% Random Forest fitting
+#%% Random Forest fitting using train set
 
 n_trees = int(pyautogui.prompt("Digite o número de árvores:"))
 
@@ -262,22 +274,20 @@ apply_rf = pyautogui.confirm(text='Deseja aplicar Random Forest nos dados brutos
 if apply_rf == "Sim":
     print('Fitting Random Forest...')
     rf = RandomForestClassifier(n_trees)
-    rf.fit(data_x, data_y)
+    rf.fit(data[train_index][:,:d], data[train_index][:,-1])
 
 if apply_pca == "Sim":
     print('Fitting Random Forest with PCA...')
     rf_pca = RandomForestClassifier(n_trees)
-    rf_pca.fit(pca_data, data_y)
+    rf_pca.fit(pca_data, data[train_index][:,-1])
     
 if apply_ica == "Sim":
     print('Fitting Random Forest with ICA...')
     rf_ica = RandomForestClassifier(n_trees)
-    rf_ica.fit(ica_data, data_y)
+    rf_ica.fit(ica_data, data[train_index][:,-1])
     
-del data_x
-del data_y
 
-#%% Predicting the image
+#%% Predicting the whole image
 
 hyper_image_data = final_image.reshape([w*h, d])
 
@@ -289,15 +299,13 @@ if apply_rf == "Sim":
 
 if apply_pca == "Sim":
     print('Predicting image with Random Forest and PCA...')
-    hyper_image_norm = hyper_image_data/hyper_image_data.max()
-    #hyper_image_norm = normalize(hyper_image_data)
+    hyper_image_norm = normalize(hyper_image_data)
     pca_image = pca.transform(hyper_image_norm)
     result_pca = rf_pca.predict(pca_image)
     
 if apply_ica == "Sim":
     print('Predicting image with Random Forest and ICA...')
-    hyper_image_norm = hyper_image_data/hyper_image_data.max()
-    #hyper_image_norm = normalize(hyper_image_data)
+    hyper_image_norm = normalize(hyper_image_data)
     ica_image = ica.transform(hyper_image_norm)
     result_ica = rf_ica.predict(ica_image)
 
@@ -360,5 +368,51 @@ if apply_ica == "Sim":
     plt.title("Random Forest with ICA")
     plt.show
     
+#%% Applying Random Forest on test set to get the score
+
+if apply_rf == "Sim":
+    print('Calculating the score with only Random Forest...')
+    score_rf = rf.score(data[test_index][:,:d], data[test_index][:,-1])
+
+if apply_pca == "Sim":
+    print('Calculating the score with Random Forest and PCA...')
+    test_set_norm = normalize(data[test_index])
+    test_pca = pca.transform(test_set_norm)
+    score_pca = rf_pca.score(test_pca[:,:d],test_pca[:,-1])
+    
+if apply_ica == "Sim":
+    print('Calculating the score with Random Forest and ICA...')
+    test_set_norm = normalize(data[test_index])
+    test_ica = ica.transform(test_set_norm)
+    score_ica = rf_ica.score(test_ica[:,:d],test_ica[:,-1])
+
+
+print("Os scores foram:")
+if apply_rf == "Sim":
+    print("Dados brutos:", score_rf)
+
+if apply_pca == "Sim":
+    print("PCA:", score_pca)
+    
+if apply_ica == "Sim":
+    print("ICA:", score_ica)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
