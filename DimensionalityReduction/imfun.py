@@ -320,11 +320,11 @@ class polyroi1(object):
         # Separating if we use or not a colormap.
         if cmap is not None:
             image_c = cv2.applyColorMap(image, cmap)
-            cv2.namedWindow(window_name, cv2.WINDOW_FULLSCREEN)
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.imshow(window_name, image_c)
             cv2.waitKey(1)
         else:
-            cv2.namedWindow(window_name, cv2.WINDOW_FULLSCREEN)
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             image_c = image.copy()
             cv2.imshow(window_name, image_c)
             cv2.waitKey(1)
@@ -454,11 +454,11 @@ class crop_image1(object):
                 image_c = cv2.applyColorMap(image, cmap)
             else:
                 image_c = image.copy()
-            cv2.namedWindow(self.window_name, cv2.WINDOW_FULLSCREEN)
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
             cv2.imshow(self.window_name, image_c)
             cv2.waitKey(1)
         else:
-            cv2.namedWindow(self.window_name, cv2.WINDOW_FULLSCREEN)
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
             image_c = image.copy()
             cv2.imshow(self.window_name, image_c)
             cv2.waitKey(1) 
