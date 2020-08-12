@@ -166,6 +166,8 @@ while end == 'Sim':
         if end == 'Sim':
             label.append(pyautogui.prompt('Escreva o nome da próxima região:'))
             i += 1
+'''
+#%%
 
 glass_index = []
 
@@ -175,7 +177,7 @@ if glass_ex == "Sim":
                   glass_index.append(index[i])
 
 del ret
-'''
+
 #%% High-pass filter
 
 def apply_filter(hyper_image, col):
