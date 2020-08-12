@@ -81,13 +81,13 @@ def filter_freq(img, tipo, freq):
 #%% Funções
 
 def load_hyper_image(folder):
+    names = os.listdir(os.curdir)
     print("Loading hyperspectral image...")
     os.chdir(folder)
-    names = os.listdir(os.curdir)
     images = []
-    for i in range(len(wavelength)):
+    for i in range(len(names)):
         images.append(cv2.imread(names[i], cv2.IMREAD_GRAYSCALE))
-    [w, h] = np.shape(images[0])
+    w, h = np.shape(images[0])
     d = len(images)
     hyper_image = np.zeros([w, h, d])
     for x in range(w):
@@ -115,7 +115,9 @@ folder = 'C:\\Users\Admin\Documents\Mateus\MachineLearning-master\Dimensionality
 # folder for linux
 #folder = '/home/mateus/TCC/Aprendendo/DimensionalityReduction/04) 21.05.20 - Microscopio Nikon, Slide 3B'
 
+#wavelength = [410, 430, 450, 470, 490, 510, 530, 540, 550, 570, 590, 610, 630, 650, 670, 690, 710]
 wavelength = [410, 430, 450, 470, 490, 510, 530, 540, 550, 570, 590, 610, 630, 650, 670, 690, 710]
+
 
 hyper_image = load_hyper_image(folder)
 
@@ -132,7 +134,14 @@ label = []
 index = []
 
 pyautogui.alert('Nesse momento as regiões serão selecionadas', "Regiões")
-label.append(pyautogui.prompt('Escreva o nome da primeira região:'))
+
+glass_ex = pyautogui.confirm(text='Existe a região do vidro?', title='Vidro', buttons=['Sim', 'Não'])
+
+if glass_ex == "Sim":
+      label.append(pyautogui.prompt('Escreva o nome da região correspondente ao vidro:'))
+
+else: 
+      label.append(pyautogui.prompt('Escreva o nome da primeira região:'))
 
 i = 0
 end = 'Sim'
@@ -158,11 +167,15 @@ while end == 'Sim':
             label.append(pyautogui.prompt('Escreva o nome da próxima região:'))
             i += 1
 
+glass_index = []
+
+if glass_ex == "Sim":
+      for i in range(len(index)):
+            if index[i][0,2] == 0:
+                  glass_index.append(index[i])
+
 del ret
 '''
-
-
-
 #%% High-pass filter
 
 def apply_filter(hyper_image, col):
@@ -197,9 +210,9 @@ def apply_filter(hyper_image, col):
                     filtered_hyper_image[:,:,i] = cv2.medianBlur(np.uint8(hyper_image[:,:,i]), size)
         f_image = np.dstack((f_image,filtered_hyper_image))
         aplicar_filtro = pyautogui.confirm(text='Deseja aplicar mais algum filtro?', title='Filtro', buttons=['Sim', 'Não'])
-    return f_image
+    return f_image, aplicar_filtro
 
-final_image = apply_filter(hyper_image, col)
+final_image, aplicar_filtro = apply_filter(hyper_image, col)
 
 # #%% Show filtered image
 
@@ -216,6 +229,26 @@ final_image = apply_filter(hyper_image, col)
 
 #%%
 #del hyper_image
+#%% White normalization
+   
+if glass_ex == "Sim" and aplicar_filtro == "Não":
+      glass_values = []
+
+      if glass_ex == "Sim":
+            for i in range(len(index)):
+                  if index[i][0,2] == 0:
+                        for x, y in index[i][:,0:2]:  
+                              glass_values.append(hyper_image[int(x),int(y),:])
+
+      glass_values = np.asarray(glass_values)
+      
+      glass_mean = np.mean(glass_values, axis=0)
+
+      for z in range(d):
+            final_image[:,:,z] = final_image[:,:,z]/glass_mean[z]
+      
+
+
 #%%
 
 d = np.shape(final_image)[2]
@@ -292,8 +325,6 @@ if apply_ica == "Sim":
 
 hyper_image_data = final_image.reshape([w*h, d])
 
-del final_image
-
 if apply_rf == "Sim":
     print('Predicting image with Random Forest...')
     result = rf.predict(hyper_image_data)
@@ -303,16 +334,13 @@ if apply_pca == "Sim":
     hyper_image_norm = normalize(hyper_image_data)
     pca_image = pca.transform(hyper_image_norm)
     result_pca = rf_pca.predict(pca_image)
-    del hyper_image_data
-    del hyper_image_norm
       
 if apply_ica == "Sim":
     print('Predicting image with Random Forest and ICA...')
     hyper_image_norm = normalize(hyper_image_data)
     ica_image = ica.transform(hyper_image_norm)
     result_ica = rf_ica.predict(ica_image)
-    del hyper_image_data
-    del hyper_image_norm
+
 
 #%% Reshaping image
 
@@ -378,15 +406,15 @@ if apply_rf == "Sim":
 
 if apply_pca == "Sim":
     print('Calculating the score with Random Forest and PCA...')
-    test_set_norm = normalize(data[test_index])
+    test_set_norm = normalize(data[test_index][:,:d])
     test_pca = pca.transform(test_set_norm)
-    score_pca = rf_pca.score(test_pca[:,:d],test_pca[:,-1])
+    score_pca = rf_pca.score(test_pca,data[test_index][:,-1])
     
 if apply_ica == "Sim":
     print('Calculating the score with Random Forest and ICA...')
-    test_set_norm = normalize(data[test_index])
+    test_set_norm = normalize(data[test_index][:,:d])
     test_ica = ica.transform(test_set_norm)
-    score_ica = rf_ica.score(test_ica[:,:d],test_ica[:,-1])
+    score_ica = rf_ica.score(test_ica[:,:d],data[test_index][:,-1])
 
 
 print("Os scores foram:")
